@@ -14,6 +14,7 @@ routes.get('/', async (req, res) => {
     res.send('Hello world !!!!  ')
 })
 
+//still in polishing mode
 routes.get('/:sha', async (req, res) => {
     var sha = req.params.sha
     console.log("inside the GET")
