@@ -1,6 +1,12 @@
 var nodegit = require("nodegit"),
   path = require("path"),
   Promise = require('promise');
+const fs = require("fs");
+const { promisify } = require('util');
+const FileType = require('file-type')
+
+var mmm = require('mmmagic'),
+Magic = mmm.Magic;
 
 
 
@@ -9,155 +15,331 @@ var url = "https://github.com/web-engineering-tuwien/recipe-search-live-demo.git
   cloneOpts = {};
 
 
-
-
-
-const { promisify } = require('util');
+//const getType = promisify(Magic.detectFile)
 const exec = promisify(require('child_process').exec)
+const readFile = (fileName) => promisify(fs.readFile)(fileName/*, 'utf8'*/);
 
 async function get_first_commit() {
     const first_commit = 'git rev-list --max-parents=0 HEAD'
     const access_repo = `cd ${local}`
 
     const first_commit_command = await exec(access_repo + " && " + first_commit)
-    const first_commit_sha = first_commit_command.stdout
+    const first_commit_sha = first_commit_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
 
-    console.log(first_commit_sha)
-    return first_commit_sha
-/*
-    const repo = await nodegit.Repository.open(local)
-    const nodegit_commit = await repo.getCommit(first_commit_sha)
-    console.log(nodegit_commit.message())
-    */
+    return first_commit_sha;
 
 };
 
 
 async function get_next_commit(current_sha) {
 
-    const next_commit = `git log --reverse --pretty=%H master | grep -A 1 $(git rev-parse ${current_sha}) | tail -n1`
-    const access_repo = `cd ${local}`
+  const next_commit = `git log --reverse --pretty=%H master | grep -A 1 $(git rev-parse ${current_sha}) | tail -n1`
+  const access_repo = `cd ${local}`
 
-    /*TODO: make sure to move onto the next next commit in case the next one is a theory commit*/
-    const next_commit_command = await exec(access_repo + " && " + next_commit)
-    const next_commit_sha = next_commit_command.stdout
+  //get sha of next commit
+  const next_commit_command = await exec(access_repo + " && " + next_commit)
+  const next_commit_sha = next_commit_command.stdout
 
-    console.log(next_commit_sha)
-    /*const repo = await nodegit.Repository.open(local)
-    const nodegit_next_commit = await repo.getCommit(next_commit_sha)
-    console.log(nodegit_next_commit.message())*/
+  //get message of next commit to check if it should be ignored
+  const message = await get_commit_message(next_commit_sha)
+
+  //if the next commit is ignored (aka a theory commit), recursively jump to the next non-ignored one
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("licence")) { 
+    return get_next_commit(next_commit_sha)
+  } 
+
+  return next_commit_sha
+}
+
+async function get_parent(commit_sha) {
+  const access_repo = `cd ${local}`
+  const get_parent = `git rev-parse ${commit_sha}^`
+
+  const parent_command = await exec(access_repo + " && " + get_parent)
+  const parent_sha = parent_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
+
+  const message = await get_commit_message(parent_sha)
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("licence") || message.toLowerCase().startsWith("license") ) { 
+    return get_parent(parent_sha)
+  } 
+
+  return parent_sha
+}
+
+
+async function get_commit_message(commit_sha) {
+  const access_repo = `cd ${local}`
+
+  const commit_message = `git log --format=%B -n 1 ${commit_sha}`
+  const message_command = await exec (access_repo + " && " + commit_message)
+  const message = message_command.stdout
+
+  return get_only_message(message);
 }
 
 
 async function get_diff(commit_sha) {
-    const repo = await nodegit.Repository.open(local)
-    const commit = await repo.getCommit(commit_sha)
-    console.log(commit.message())
-    const diff_array = await commit.getDiff()
 
-    const diff_files = await get_diff_for_files(diff_array)
+  const access_repo = `cd ${local}`
 
-    /*TODO: return some object here */
+  const parent_sha = await get_parent(commit_sha)
 
-    diff_files.forEach(function(file) {
-      console.log("============================= NEW FILE =============================")
-      console.log(file)
-    })
-      
+  const get_diff = `git diff -U10000 ${parent_sha} ${commit_sha}`
+  const diff_command = await exec(access_repo + " && " + get_diff)
+  let diff_output = diff_command.stdout
+
+  //console.log(diff_output)
+  return diff_output;
+}
+
+async function get_diff_first_commit(commit_sha) {
+
+  const access_repo = `cd ${local}`
+
+  const get_diff = `git diff -U10000 4b825dc642cb6eb9a060e54bf8d69288fbee4904 ${commit_sha}`
+  const diff_command = await exec(access_repo + " && " + get_diff)
+  let diff_output = diff_command.stdout
+
+  //console.log(diff_output)
+  return diff_output;
 }
 
 
+class TheoryPiece {
+  constructor(type, file) {
+      this.type = type;
+      this.file = file;
+  }
+}
 
-async function get_diff_for_files(diff_array) {
-  var diffFiles = []
+async function get_theory(commit_sha) {
+  let theory_array = get_theory_array(commit_sha)
 
-  var i;
-  for (i=0; i<diff_array.length; i++) { 
-    var patches = await diff_array[i].patches()
-    
-    var j;
-    for (j=0; j<patches.length; j++) {
-      var hunks = await patches[j].hunks()
-      var diffFile = ''
+  let theory = []
 
-      var k;
-      for (k=0; k<hunks.length; k++) {
-        var lines = await hunks[k].lines()
+  for (let path of theory_array) {
 
-        var l;
-        for (l=0; l<lines.length; l++) {
-          diffFile += String.fromCharCode(lines[l].origin()) +
-            lines[l].content().trim() + '\n'
-        }
-      }
+    if (is_url(path)) {
+      let theory_piece = new TheoryPiece("URL", path)
+      theory.push(theory_piece)
 
-      diffFiles.push(diffFile)
+    } else {
+      let file = await get_file_from_commit(commit_sha, path)
+      let type = await detectMimeType(path)
+      let theory_piece = new TheoryPiece(type, file)
+      allowed_type(type)? theory.push(theory_piece) : console.log(`Type ${type} not supported`)
     }
-
     
   }
 
-  return diffFiles;
-    
+  return theory;
+}
+
+//check what changes could be made to the file reading encoding in case we need to read media
+async function get_file_from_commit(commit_sha, file_path) {
+  const access_repo = `cd ${local}`
+  let git_checkout = `git checkout ${commit_sha}`
+  let checkout_command = await exec(access_repo + " && " + git_checkout)//don't remove this
+  let get_head = await exec(access_repo + " && " + "git rev-parse HEAD")
+  let head = get_head.stdout
+  
+  let file;
+  try {
+    //file = await readFile(`${local}/${file_path}`) //uncomment this, it's the final code
+    file = await readFile(file_path)
+  } catch (error) {
+    console.log(error)
+  }
+
+  return file
+}
+
+function allowed_type(mime_type) {
+  return (mime_type.startsWith("text/")) || (mime_type.startsWith("image/"))
 }
 
 
+function get_only_message(commit_message) {
+  return commit_message.split("#theory#")[0]
+}
 
-async function get_theory_commit(commit_sha) {
-  //here we'll insert a pattern instead (aka:THEORY#some_sha#), as soon as we have a tryout repo
-  const search_by_message = `git log --all --grep=${commit_sha}`
+function get_theory_array(commit_sha) {
+  /*const access_repo = `cd ${local}`
+
+  const commit_message = `git log --format=%B -n 1 ${commit_sha}`
+  const message_command = await exec (access_repo + " && " + commit_message)
+  const message = message_command.stdout
+  let theory = commit_message.split("#theory#")[1]
+  let theory_array = theory.split("|").select(theory_bit => theory_bit.trim()).toArray()*/
+  
+  //delete this fake array later 
+  let theory_path_1 = "/Users/lorianaporumb/Desktop/sw_history_narratives/cat.jpeg"
+  let theory_path_2 = "/Users/lorianaporumb/Desktop/sw_history_narratives/text.html"
+  let theory_path_3 = "/Users/lorianaporumb/Desktop/sw_history_narratives/lyrics.txt"
+
+  let theory = []
+  theory.push(theory_path_1)
+  theory.push(theory_path_2)
+  theory.push(theory_path_3)
+  theory.push("https://www.youtube.com/watch?v=BrQKM_uaZKE")
+//
+
+  
+
+  return /*theory_array*/ theory
+}
+
+async function detectMimeType(filePath) {
+  let detectMime = new Promise((resolve, reject) => {
+        var magic = new Magic(mmm.MAGIC_MIME_TYPE);
+        magic.detectFile(filePath, function(err, result) {
+             if (err) reject(err);
+             resolve(result);
+        });
+  });
+
+  let result = await detectMime;
+
+  return result;
+}
+
+function is_url(string) {
+  let regexp = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/
+  return regexp.test(string);
+}
+ 
+
+/*
+
+async function git_show(commit_sha) {
+  
+  const search_by_message = `git show -U1000 ${commit_sha}`
   const access_repo = `cd ${local}`
 
   const theory_command = await exec(access_repo + " && " + search_by_message)
   const theory_sha = theory_command.stdout
 
-  console.log(theory_sha)
+  return theory_sha
+}
+
+class ChangedFile {
+  constructor(current_path, previous, current) {
+    this.current_path = current_path;
+    this.previous = previous;
+    this.current = current;
+  }
 }
 
 
-/*
-async function get_all_commits_sha() {
-    const repo = await nodegit.Repository.open(local)
-  
-    const latest_master_commit = await repo.getMasterCommit()
-  
-    const commits = await new Promise(function (resolve, reject) {
-      var hist = latest_master_commit.history()
-      hist.start()
-      hist.on("end", resolve);
-      hist.on("error", reject);
-    });
-  
-    commits.reverse()
-  
-    for (var i = 0; i < commits.length; i++) {
-      //var sha = commits[i].sha().substr(0,7),   for the sha shorthand, but getting a file by sha shorthand doesn't work at the moment
-      
-      var sha = commits[i].sha(),
-        msg = commits[i].message().split('\n')[0]; //will need this later so I'm leaving it in
-        
-      console.log(sha + " " + msg);
-      var diff = await commits[i].getDiff()
-      
-     
+//for getting first commit on a current branch: git log master..branch --oneline | tail -1
+//getting last commit on a current branch: git rev-parse branch-name
+//get current branch: git branch --show-current
+
+
+
+async function get_initial_commit_files(commit_sha) {
+
+  const access_repo = `cd ${local}`
+
+  const get_added_file_paths = `git show --pretty="" ${commit_sha} --name-only`  //another way, apparently better: git diff-tree --no-commit-id --name-only -r bd61ad98
+  const added_paths_command = await exec(access_repo + " && " + get_added_file_paths)
+  //console.log(added_paths_command.stdout)
+  let added_file_paths = added_paths_command.stdout.split("\n")
+  added_file_paths = added_file_paths.slice(0, added_file_paths.length-1)
+
+
+
+
+  let files = [];
+  for (let i = 0; i < added_file_paths.length; i ++) {
+
+    let path = added_file_paths[i]
+    let file = new ChangedFile(path, '', '')
+
+    try {
+      let cat_file_at_commit = `git cat-file -p ${commit_sha}:${path}`
+      let cat_file_command = await exec(access_repo + " && " + cat_file_at_commit)
+      const file_content = cat_file_command.stdout
+      file.current = file_content
+    } catch (error) {
+      //console.log(error)
+      //this should theoretically never fail, but must think of what to do if it does
     }
-  
+
+    files.push(file)
   }
-*/
 
- 
+  return files;
+
+}
+
+
+async function get_old_new_files(commit_sha) {
+  
+  //const search_by_message = `git show -U1000 ${commit_sha}`
+  const access_repo = `cd ${local}`
+  const get_parent = `git rev-parse ${commit_sha}^`
   
 
+  const parent_command = await exec(access_repo + " && " + get_parent)
+  const parent_sha = parent_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
+
+  const get_modified_files_paths = `git diff --name-only ${parent_sha} ${commit_sha}`
+  const modified_paths_command = await exec(access_repo + " && " + get_modified_files_paths)
+  let modified_file_paths = modified_paths_command.stdout.split("\n")
+  modified_file_paths = modified_file_paths.slice(0, modified_file_paths.length-1)
+
+
+  //console.log(modified_file_paths)
+  let modified_files = []
+  for (let i = 0; i < modified_file_paths.length; i ++) {
+
+    let path = modified_file_paths[i]
+    //console.log(`Path: ${path}`)
+    let file = new ChangedFile(path, '', '')
+    let sha = parent_sha
+    try {
+      let cat_file_at_commit = `git cat-file -p ${sha}:${path}`
+      let cat_file_command = await exec(access_repo + " && " + cat_file_at_commit)
+      const file_content = cat_file_command.stdout
+      file.previous = file_content
+    } catch (error) {
+      //console.log(error)
+    }
+
+    sha = commit_sha
+    try {
+      let cat_file_at_commit = `git cat-file -p ${sha}:${path}`
+      let cat_file_command = await exec(access_repo + " && " + cat_file_at_commit)
+      const file_content = cat_file_command.stdout
+      file.current = file_content
+    } catch (error) {
+      //console.log(error)
+    }
+    modified_files.push(file)
+  }
+
+  return modified_files;
+  
+
+}*/
 
 
 
-//get_first_commit().then(console.log("DOONE"))
-//get_next_commit("35949ff7dd29c197171339ae6a51389b30787c8f").then(console.log("DOONE"))
+  
 //get_diff('13a435e480e9ced68a06414d65589d7b2fe90964').then(console.log("DOONE"))
-//get_diff('12c4e858812fa47eed16fcd689708a1f9bc75555').then(console.log("DOONE"))
-//get_theory_commit_sha("Introducing").then(console.log("GOT SHA"))
+//get_file_from_commit("13a435e480e9ced68a06414d65589d7b2fe90964", "index.html")
+//get_first_commit()
+
+//get_file_type("cat.jpeg")
+//get_file_type("../image.png")
+//get_theory('13a435e480e9ced68a06414d65589d7b2fe90964')
 
 
 
 
-module.exports={get_first_commit, get_next_commit, get_theory_commit}
+
+
+
+
+module.exports={get_first_commit, get_next_commit, get_parent, get_commit_message, get_diff, get_diff_first_commit, get_theory, get_theory_array, get_file_from_commit}
