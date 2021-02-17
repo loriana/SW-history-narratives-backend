@@ -60,10 +60,8 @@ async function get_parent(commit_sha) {
 
   const message = await get_commit_message(parent_sha)
   if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
-    console.log(`INSIDE IF, parent message: ${message}`)
     return await get_parent(parent_sha)
   } 
-  console.log(`AFTER IF, parent message: ${message}`)
 
   return parent_sha
 }
