@@ -44,8 +44,8 @@ async function get_next_commit(current_sha) {
   const message = await get_commit_message(next_commit_sha)
 
   //if the next commit is ignored (aka a theory commit), recursively jump to the next non-ignored one
-  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("licence")) { 
-    return get_next_commit(next_commit_sha)
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
+    return await get_next_commit(next_commit_sha)
   } 
 
   return next_commit_sha
@@ -53,15 +53,17 @@ async function get_next_commit(current_sha) {
 
 async function get_parent(commit_sha) {
   const access_repo = `cd ${local}`
-  const get_parent = `git rev-parse ${commit_sha}^`
+  const get_parent_template = `git rev-parse ${commit_sha}^`
 
-  const parent_command = await exec(access_repo + " && " + get_parent)
+  const parent_command = await exec(access_repo + " && " + get_parent_template)
   const parent_sha = parent_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
 
   const message = await get_commit_message(parent_sha)
-  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("licence") || message.toLowerCase().startsWith("license") ) { 
-    return get_parent(parent_sha)
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
+    console.log(`INSIDE IF, parent message: ${message}`)
+    return await get_parent(parent_sha)
   } 
+  console.log(`AFTER IF, parent message: ${message}`)
 
   return parent_sha
 }
