@@ -11,7 +11,8 @@ Magic = mmm.Magic;
 
 
 var url = "https://github.com/web-engineering-tuwien/recipe-search-live-demo.git", //in case we want to clone a repo
-  local = "/Users/lorianaporumb/Desktop/RecipePuppy" 
+  //local = "/Users/lorianaporumb/Desktop/RecipePuppy" 
+  local = "/Users/lorianaporumb/Desktop/Test_repo" 
   cloneOpts = {};
 
 
@@ -33,7 +34,8 @@ async function get_first_commit() {
 
 async function get_next_commit(current_sha) {
 
-  const next_commit = `git log --reverse --pretty=%H master | grep -A 1 $(git rev-parse ${current_sha}) | tail -n1`
+  //in case the repo is old, might need to change "main" in this command to "master"
+  const next_commit = `git log --reverse --pretty=%H main | grep -A 1 $(git rev-parse ${current_sha}) | tail -n1`
   const access_repo = `cd ${local}`
 
   //get sha of next commit
@@ -44,8 +46,8 @@ async function get_next_commit(current_sha) {
   const message = await get_commit_message(next_commit_sha)
 
   //if the next commit is ignored (aka a theory commit), recursively jump to the next non-ignored one
-  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
-    return await get_next_commit(next_commit_sha)
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license") || message.toLowerCase().startsWith("#arc#")) { 
+    return get_next_commit(next_commit_sha)
   } 
 
   return next_commit_sha
@@ -59,7 +61,7 @@ async function get_parent(commit_sha) {
   const parent_sha = parent_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
 
   const message = await get_commit_message(parent_sha)
-  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("#arc#") || message.toLowerCase().startsWith("mit license")) { 
     return await get_parent(parent_sha)
   } 
 
@@ -145,8 +147,7 @@ async function get_file_from_commit(commit_sha, file_path) {
   
   let file;
   try {
-    //file = await readFile(`${local}/${file_path}`) //uncomment this, it's the final code
-    file = await readFile(file_path)
+    file = await readFile(`${local}/${file_path}`) //uncomment this, it's the final code
   } catch (error) {
     console.log(error)
   }
@@ -163,16 +164,22 @@ function get_only_message(commit_message) {
   return commit_message.split("#theory#")[0]
 }
 
-function get_theory_array(commit_sha) {
-  /*const access_repo = `cd ${local}`
+async function get_theory_array(commit_sha) {
+  let theory_array = []
+
+  const access_repo = `cd ${local}`
 
   const commit_message = `git log --format=%B -n 1 ${commit_sha}`
   const message_command = await exec (access_repo + " && " + commit_message)
   const message = message_command.stdout
-  let theory = commit_message.split("#theory#")[1]
-  let theory_array = theory.split("|").select(theory_bit => theory_bit.trim()).toArray()*/
+  if (message.includes("#theory#")) {
+    let theory = message.split("#theory#")[1]
+    theory_array = theory.split("|")
+    theory_array = theory_array.map(t => t.trim())
+  }
   
-  //delete this fake array later 
+  
+  /*delete this fake array later 
   let theory_path_1 = "/Users/lorianaporumb/Desktop/sw_history_narratives/cat.jpeg"
   let theory_path_2 = "/Users/lorianaporumb/Desktop/sw_history_narratives/text.html"
   let theory_path_3 = "/Users/lorianaporumb/Desktop/sw_history_narratives/lyrics.txt"
@@ -181,12 +188,12 @@ function get_theory_array(commit_sha) {
   theory.push(theory_path_1)
   theory.push(theory_path_2)
   theory.push(theory_path_3)
-  theory.push("https://www.youtube.com/watch?v=BrQKM_uaZKE")
+  theory.push("https://www.youtube.com/watch?v=BrQKM_uaZKE")*/
 //
 
   
 
-  return /*theory_array*/ theory
+  return theory_array /*theory*/
 }
 
 async function detectMimeType(filePath) {
@@ -334,11 +341,6 @@ async function get_old_new_files(commit_sha) {
 //get_file_type("cat.jpeg")
 //get_file_type("../image.png")
 //get_theory('13a435e480e9ced68a06414d65589d7b2fe90964')
-
-
-
-
-
 
 
 
