@@ -10,7 +10,8 @@ const routes = express.Router();
 module.exports = routes;
 
 class Commit {
-    constructor(next_sha, current_sha, message, files, theory) {
+    constructor(type, next_sha, current_sha, message, files, theory) {
+      this.type = type;
       this.next_sha = next_sha;
       this.current_sha = current_sha;
       this.message = message;
@@ -25,13 +26,20 @@ class Commit {
 routes.get('/', async (req, res) => {
     
     let first_sha = await git.get_first_commit()
-    let message = await git.get_commit_message(first_sha)
-    let files = await git.get_diff_first_commit(first_sha)
     let next_sha = await git.get_next_commit(first_sha)
-    let theory = await git.get_theory_array(first_sha)
+    let message = await git.get_commit_message(first_sha)
+    let type = message.includes("#arc#")? "arc" : "normal"
+    let files = []
+    let theory = []
 
+    if (type === "normal") {
+        files = await git.get_diff_first_commit(first_sha)
+        theory = await git.get_theory_array(first_sha)
+    } else {
+        files = await git.arc_description(first_sha)
+    }
 
-    let commit = new Commit(next_sha, first_sha, message, files, theory)
+    let commit = new Commit(type, next_sha, first_sha, message, files, theory)
 
 
     res.status(200).send(commit); 
@@ -42,12 +50,21 @@ routes.get('/', async (req, res) => {
 routes.get('/:sha', async (req, res) => { //this needs an update 
     var sha = req.params.sha
     
-    let files = await git.get_diff(sha)
     let next_sha = await git.get_next_commit(sha)
     let message = await git.get_commit_message(sha)
-    let theory = await git.get_theory_array(sha)
 
-    let commit = new Commit(next_sha, sha, message, files, theory)
+    let type = message.includes("#arc#")? "arc" : "normal"
+    let files = []
+    let theory = []
+
+    if (type === "normal") {
+        files = await git.get_diff(sha)
+        theory = await git.get_theory_array(sha)
+    } else {
+        files = await git.arc_description(sha)
+    }
+
+    let commit = new Commit(type, next_sha, sha, message, files, theory)
 
     res.status(200).send(commit); 
 
@@ -63,5 +80,6 @@ routes.get('/theory/:sha', async (req, res) => {
     res.status(200).send(theory); 
 
 })
+
 
 

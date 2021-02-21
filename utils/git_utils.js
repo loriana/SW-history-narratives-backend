@@ -46,7 +46,7 @@ async function get_next_commit(current_sha) {
   const message = await get_commit_message(next_commit_sha)
 
   //if the next commit is ignored (aka a theory commit), recursively jump to the next non-ignored one
-  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license") || message.toLowerCase().startsWith("#arc#")) { 
+  if (message.toLowerCase().startsWith("#ignore#") || message.toLowerCase().startsWith("mit license")) { 
     return get_next_commit(next_commit_sha)
   } 
 
@@ -115,7 +115,8 @@ class TheoryPiece {
 }
 
 async function get_theory(commit_sha) {
-  let theory_array = get_theory_array(commit_sha)
+  let theory_array = await get_theory_array(commit_sha)
+  console.log(theory_array)
 
   let theory = []
 
@@ -144,10 +145,14 @@ async function get_file_from_commit(commit_sha, file_path) {
   let checkout_command = await exec(access_repo + " && " + git_checkout)//don't remove this
   let get_head = await exec(access_repo + " && " + "git rev-parse HEAD")
   let head = get_head.stdout
+  console.log(`CURRENT HEAD: ${head}`)
   
   let file;
   try {
-    file = await readFile(`${local}/${file_path}`) //uncomment this, it's the final code
+    //let path = "/Users/lorianaporumb/Desktop/Test_repo/theory/cat.jpeg"
+    file = await readFile(`${local}/${file_path.trim()}` /*path*/) //uncomment this, it's the final code
+    //await exec("open /Users/lorianaporumb/Desktop/Test_repo/theory/cat.jpeg")
+    console.log(`LOOKING FOR THEORY AT PATH ${local}/${file_path.trim()}`)
   } catch (error) {
     console.log(error)
   }
@@ -194,6 +199,40 @@ async function get_theory_array(commit_sha) {
   
 
   return theory_array /*theory*/
+}
+
+
+async function arc_description(commit_sha) {
+  const access_repo = `cd ${local}`
+
+  let new_files_paths = await get_new_files_paths(commit_sha)
+  let arc_desc_file;
+
+  try {
+    let cat_file_at_commit = `git cat-file -p ${commit_sha}:${new_files_paths[0]}`
+    let cat_file_command = await exec(access_repo + " && " + cat_file_at_commit)
+
+    arc_desc_file = cat_file_command.stdout
+  } catch (error) {
+    //console.log(error)
+    //this should theoretically never fail, but must think of what to do if it does
+  }
+
+  console.log(arc_desc_file)
+  return arc_desc_file
+}
+
+
+async function get_new_files_paths(commit_sha) {
+  const access_repo = `cd ${local}`
+
+  const get_added_file_paths = `git show --pretty="" ${commit_sha} --name-only`  //another way, apparently better: git diff-tree --no-commit-id --name-only -r bd61ad98
+  const added_paths_command = await exec(access_repo + " && " + get_added_file_paths)
+  //console.log(added_paths_command.stdout)
+  let added_file_paths = added_paths_command.stdout.split("\n")
+  added_file_paths = added_file_paths.slice(0, added_file_paths.length-1)
+
+  return added_file_paths
 }
 
 async function detectMimeType(filePath) {
@@ -341,7 +380,8 @@ async function get_old_new_files(commit_sha) {
 //get_file_type("cat.jpeg")
 //get_file_type("../image.png")
 //get_theory('13a435e480e9ced68a06414d65589d7b2fe90964')
+//arc_description("40cefc8c8208d18aef188a4ccaf9a24556c838ec")
 
 
 
-module.exports={get_first_commit, get_next_commit, get_parent, get_commit_message, get_diff, get_diff_first_commit, get_theory, get_theory_array, get_file_from_commit}
+module.exports={get_first_commit, get_next_commit, get_parent, get_commit_message, arc_description, get_diff, get_diff_first_commit, get_theory, get_theory_array, get_file_from_commit}
