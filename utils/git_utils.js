@@ -128,7 +128,9 @@ async function get_theory(commit_sha) {
 
     } else {
       let file = await get_file_from_commit(commit_sha, path)
+      console.log("RECEIVED FILE SUCCESSFULLY")
       let type = await detectMimeType(path)
+      console.log("GOT MIME TYPE SUCCESSFULLY")
       let theory_piece = new TheoryPiece(type, file)
       allowed_type(type)? theory.push(theory_piece) : console.log(`Type ${type} not supported`)
     }
@@ -147,12 +149,11 @@ async function get_file_from_commit(commit_sha, file_path) {
   let head = get_head.stdout
   console.log(`CURRENT HEAD: ${head}`)
   
-  let file;
+  let file; 
   try {
-    //let path = "/Users/lorianaporumb/Desktop/Test_repo/theory/cat.jpeg"
-    file = await readFile(`${local}/${file_path.trim()}` /*path*/) //uncomment this, it's the final code
-    //await exec("open /Users/lorianaporumb/Desktop/Test_repo/theory/cat.jpeg")
-    console.log(`LOOKING FOR THEORY AT PATH ${local}/${file_path.trim()}`)
+    let theory_path = path.join(local, file_path.trim())
+    file = await readFile(theory_path) 
+
   } catch (error) {
     console.log(error)
   }
@@ -236,9 +237,10 @@ async function get_new_files_paths(commit_sha) {
 }
 
 async function detectMimeType(filePath) {
+  let absolute_path = path.join(local, filePath)
   let detectMime = new Promise((resolve, reject) => {
         var magic = new Magic(mmm.MAGIC_MIME_TYPE);
-        magic.detectFile(filePath, function(err, result) {
+        magic.detectFile(absolute_path, function(err, result) {
              if (err) reject(err);
              resolve(result);
         });
