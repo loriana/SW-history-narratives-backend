@@ -27,7 +27,7 @@ async function get_first_commit() {
     const first_commit_command = await exec(access_repo + " && " + first_commit)
     const first_commit_sha = first_commit_command.stdout.replace(/(\r\n|\n|\r)/gm, "")
 
-    return first_commit_sha;
+    return first_commit_sha.trim();
 
 };
 
@@ -50,7 +50,7 @@ async function get_next_commit(current_sha) {
     return get_next_commit(next_commit_sha)
   } 
 
-  return next_commit_sha
+  return next_commit_sha.trim()
 }
 
 async function get_parent(commit_sha) {
@@ -65,7 +65,7 @@ async function get_parent(commit_sha) {
     return await get_parent(parent_sha)
   } 
 
-  return parent_sha
+  return parent_sha.trim()
 }
 
 
@@ -167,7 +167,7 @@ function allowed_type(mime_type) {
 
 
 function get_only_message(commit_message) {
-  return commit_message.split("#theory#")[0]
+  return commit_message.split("#theory#")[0].trim()
 }
 
 async function get_theory_array(commit_sha) {
