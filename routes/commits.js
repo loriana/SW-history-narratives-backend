@@ -45,8 +45,8 @@ routes.get('/', async (req, res) => {
     res.status(200).send(commit); 
 })
 
-//http://localhost:3000/commits/12c4e858812fa47eed16fcd689708a1f9bc75555
-//still in polishing mode
+
+
 routes.get('/:sha', async (req, res) => { //this needs an update 
     var sha = req.params.sha
     
@@ -71,11 +71,8 @@ routes.get('/:sha', async (req, res) => { //this needs an update
 })
 
 routes.get('/theory/:sha', async (req, res) => {
-    console.log("INSIDE /:sha")
     let sha = req.params.sha
     let theory = await git.get_theory(sha)
-
-    console.log(theory)
 
     res.status(200).send(theory); 
 

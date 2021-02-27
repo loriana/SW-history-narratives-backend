@@ -116,7 +116,6 @@ class TheoryPiece {
 
 async function get_theory(commit_sha) {
   let theory_array = await get_theory_array(commit_sha)
-  console.log(theory_array)
 
   let theory = []
 
@@ -128,9 +127,7 @@ async function get_theory(commit_sha) {
 
     } else {
       let file = await get_file_from_commit(commit_sha, path)
-      console.log("RECEIVED FILE SUCCESSFULLY")
       let type = await detectMimeType(path)
-      console.log("GOT MIME TYPE SUCCESSFULLY")
       let theory_piece = new TheoryPiece(type, file)
       allowed_type(type)? theory.push(theory_piece) : console.log(`Type ${type} not supported`)
     }
@@ -145,9 +142,10 @@ async function get_file_from_commit(commit_sha, file_path) {
   const access_repo = `cd ${local}`
   let git_checkout = `git checkout ${commit_sha}`
   let checkout_command = await exec(access_repo + " && " + git_checkout)//don't remove this
+  /** uncomment to check which commit is the current head
   let get_head = await exec(access_repo + " && " + "git rev-parse HEAD")
   let head = get_head.stdout
-  console.log(`CURRENT HEAD: ${head}`)
+   */
   
   let file; 
   try {
@@ -215,11 +213,10 @@ async function arc_description(commit_sha) {
 
     arc_desc_file = cat_file_command.stdout
   } catch (error) {
-    //console.log(error)
+    console.log(error)
     //this should theoretically never fail, but must think of what to do if it does
   }
 
-  console.log(arc_desc_file)
   return arc_desc_file
 }
 
