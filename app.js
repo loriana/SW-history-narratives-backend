@@ -23,6 +23,7 @@ app.use(cors())
  * Read arguments and either clone a repo at a local path
  * Or update the variable local to the local path provided (if no url given)
  */
+
 global.local = ""  //the local repo path, available globally
 
 if (argv.url && argv.local) {
@@ -31,9 +32,9 @@ if (argv.url && argv.local) {
 } else if (!argv.url && argv.local) {
     local = argv.local
 } else {
-    console.error("You need to specify a path to a local repo with --local=your_path")
-    console.error("Optionally, you can also specify a repo's url with --url=the_repo_url, which will clone the remote repo into at local path")
+    console.log("Using the last local repository path, since no new information or incomplete information was given.")
 }
+
 
 
 const port = process.env.port || 3030
